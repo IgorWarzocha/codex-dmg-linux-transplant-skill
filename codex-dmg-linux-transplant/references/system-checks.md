@@ -26,8 +26,19 @@ That probe should confirm:
   - `gcc`
   - `g++`
   - `make`
+- Python packaging support for installing Pillow if needed
 - existing Electron binaries, if any
 - existing Codex launchers, desktop files, and install directories
+
+## Prerequisite install step
+
+After probing, run:
+
+```bash
+../scripts/ensure-prereqs.sh
+```
+
+This should install missing dependencies for supported distros before the transplant proceeds.
 
 ## Fail-fast rules
 
@@ -49,8 +60,11 @@ The user asked for a single main desktop version. Check and later clean up:
 - `/opt/codex-desktop*`
 - `/usr/bin/codex-desktop`
 
-## DMG extraction requirement
+## DMG asset requirement
 
-`7z` is the preferred path for extracting `Info.plist` and `app.asar` from `Codex.dmg`.
+The transplant must extract both:
 
-If `7z` is not present, install it first.
+- `app.asar`
+- the default Codex icon from the DMG
+
+Do not ship a placeholder icon.

@@ -12,21 +12,33 @@ build_number="$3"
 final_dir="$HOME/.local/opt/codex-desktop"
 wrapper_path="$HOME/.local/bin/codex-desktop"
 desktop_path="$HOME/.local/share/applications/codex-desktop.desktop"
+icon_path="$HOME/.local/share/icons/hicolor/512x512/apps/codex-desktop.png"
 backup_dir="${final_dir}.backup.$(date +%s)"
 
-electron_bin='$HOME/.local/opt/codex-desktop/electron/node_modules/electron/dist/electron'
-
-mkdir -p "$HOME/.local/opt" "$HOME/.local/bin" "$HOME/.local/share/applications"
+mkdir -p "$HOME/.local/opt" "$HOME/.local/bin" "$HOME/.local/share/applications" "$(dirname "$icon_path")"
 
 if [[ ! -f "$stage_dir/resources/app.asar" ]]; then
   echo 'stage_dir is missing resources/app.asar' >&2
   exit 1
 fi
 
+if [[ ! -x "$stage_dir/cli/node_modules/.bin/codex" ]]; then
+  echo 'stage_dir is missing a local Linux codex cli' >&2
+  exit 1
+fi
+
+if [[ ! -f "$stage_dir/icon.png" ]]; then
+  echo 'stage_dir is missing icon.png extracted from the dmg' >&2
+  exit 1
+fi
+
+rm -rf "$stage_dir/native-build" "$stage_dir/.python-deps"
+
 if [[ -d "$final_dir" ]]; then
   mv "$final_dir" "$backup_dir"
 fi
 mv "$stage_dir" "$final_dir"
+install -Dm644 "$final_dir/icon.png" "$icon_path"
 
 cat > "$final_dir/package.json" <<EOF
 {
@@ -46,7 +58,10 @@ set -euo pipefail
 
 export ELECTRON_FORCE_IS_PACKAGED=1
 
-if [[ -z "${CODEX_CLI_PATH-}" ]] && command -v codex >/dev/null 2>&1; then
+local_cli="$HOME/.local/opt/codex-desktop/cli/node_modules/.bin/codex"
+if [[ -x "$local_cli" ]]; then
+  export CODEX_CLI_PATH="$local_cli"
+elif [[ -z "${CODEX_CLI_PATH-}" ]] && command -v codex >/dev/null 2>&1; then
   export CODEX_CLI_PATH="$(command -v codex)"
 fi
 
@@ -69,9 +84,14 @@ Comment=OpenAI Codex Desktop
 Exec=${wrapper_path} %U
 Terminal=false
 Categories=Development;
+Icon=${icon_path}
 StartupWMClass=Codex
 MimeType=x-scheme-handler/codex;
 EOF
+
+find "$HOME/.local/bin" -maxdepth 1 -type f -name 'codex-desktop-*' -delete
+find "$HOME/.local/share/applications" -maxdepth 1 -type f -name 'codex-desktop-*.desktop' -delete
+find "$HOME/.local/opt" -maxdepth 1 -mindepth 1 -type d -name 'codex-desktop-*' -exec rm -rf {} +
 
 echo "installed to $final_dir"
 if [[ -d "$backup_dir" ]]; then

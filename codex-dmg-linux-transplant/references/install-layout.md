@@ -10,6 +10,7 @@ Install to:
 ~/.local/opt/codex-desktop
 ~/.local/bin/codex-desktop
 ~/.local/share/applications/codex-desktop.desktop
+~/.local/share/icons/hicolor/512x512/apps/codex-desktop.png
 ```
 
 ## Why fixed paths
@@ -20,9 +21,12 @@ Use fixed paths so updates replace the main install instead of creating side-by-
 
 ```text
 ~/.local/opt/codex-desktop/
+├── cli/
+│   └── node_modules/
 ├── electron/
 │   └── node_modules/electron/
 ├── package.json
+├── icon.png
 └── resources/
     ├── app.asar
     └── app.asar.unpacked/
@@ -33,7 +37,8 @@ Use fixed paths so updates replace the main install instead of creating side-by-
 The wrapper should:
 
 - set `ELECTRON_FORCE_IS_PACKAGED=1`
-- prefer the global `codex` CLI if present
+- prefer the bundled Linux Codex CLI path first
+- optionally fall back to a global `codex`
 - launch the self-contained Electron runtime from the app directory
 - pass Wayland flags when appropriate
 
@@ -43,6 +48,7 @@ The desktop file should:
 
 - point to `~/.local/bin/codex-desktop`
 - use the plain app name `Codex`
+- use the extracted default Codex icon
 - replace older user-local Codex desktop entries after verification
 
 ## Cleanup after successful install

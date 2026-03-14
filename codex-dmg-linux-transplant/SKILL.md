@@ -5,19 +5,21 @@ description: Install or update Codex Desktop on Linux from a Codex.dmg when no o
 
 # Codex DMG → Linux Transplant
 
-Use this skill for Codex Desktop install/update work when the source artifact is a macOS `Codex.dmg` and Linux needs a transplanted desktop build.
+Use this skill when Codex Desktop must be installed or updated on Linux from a macOS `Codex.dmg`.
 
 ## Non-negotiable rules
 
-1. **Assume there is no usable Codex desktop install already.** Never rely on an existing community port being present.
-2. **Always probe the system first.** Read `references/system-checks.md` and run `scripts/probe-system.sh` before changing anything.
-3. **Install one main version only.** The target layout is:
+1. **Assume no existing Codex desktop install.** Never depend on an older community port.
+2. **Probe the machine first.** Read the references and run `scripts/probe-system.sh`.
+3. **Install one main version only.** Final paths:
    - `~/.local/opt/codex-desktop`
    - `~/.local/bin/codex-desktop`
    - `~/.local/share/applications/codex-desktop.desktop`
-4. **No side-by-side versioned launchers** unless the user explicitly asks for them.
-5. **DMG source order:** user-supplied path → search Downloads and nearby folders → default URL `https://persistent.oaistatic.com/codex-app-prod/Codex.dmg`.
-6. **Fail fast if prerequisites are missing.** Do not pretend the transplant is complete if native modules or Electron runtime are missing.
+4. **Always install the default Codex icon from the DMG.** Do not use a placeholder or a borrowed icon.
+5. **Always provide a Linux Codex CLI path.** Do not rely on a preexisting global `codex` command being present.
+6. **Do not finish until the installed wrapper actually launches.** A staged build is not enough.
+7. **No side-by-side versioned launchers** unless the user explicitly asks for them.
+8. **DMG source order:** user path → safe search → default URL `https://persistent.oaistatic.com/codex-app-prod/Codex.dmg`.
 
 ## Required reading order
 
@@ -28,70 +30,67 @@ Use this skill for Codex Desktop install/update work when the source artifact is
 
 ## Default workflow
 
-### 1) Probe the machine
+### 1) Probe and satisfy prerequisites
 Run:
 
 ```bash
 ./scripts/probe-system.sh
+./scripts/ensure-prereqs.sh
 ```
 
-Confirm at minimum:
-- distro and package manager
-- `python3`, `node`, `npm`, `git`, `curl`
-- build tools like `gcc`, `g++`, `make`
-- `7z` for DMG extraction
-- any existing Codex launchers or directories that must be replaced
-
 ### 2) Locate or fetch the DMG
-Use a user path if provided. Otherwise search safely with `find`. If nothing suitable exists, download the default DMG URL.
+Use a provided path if available. Otherwise search safely. If nothing is found, use the default Codex DMG URL.
 
-### 3) Extract metadata from the DMG
+### 3) Extract metadata and assets from the DMG
 Run:
 
 ```bash
 python ./scripts/extract-codex-dmg-metadata.py /path/to/Codex.dmg
+python ./scripts/extract-codex-dmg-assets.py /path/to/Codex.dmg /tmp/codex-stage
 ```
 
-This prints JSON with the app version, build number, Electron version, and key dependency versions.
+This must produce at least:
+- `resources/app.asar`
+- the default app icon as `icon.png`
 
 ### 4) Build a Linux host bundle from scratch
 Never assume an older Codex port exists.
 
-Bootstrap a self-contained Electron runtime:
+Bootstrap Electron:
 
 ```bash
 ./scripts/bootstrap-electron-runtime.sh /tmp/codex-stage <electron-version>
 ```
 
-Then rebuild Linux-native modules:
+Install a Linux Codex CLI into the bundle:
+
+```bash
+./scripts/install-codex-cli.sh /tmp/codex-stage
+```
+
+Rebuild Linux-native modules:
 
 ```bash
 ./scripts/rebuild-native-modules.sh /tmp/codex-stage <electron-version> <better-sqlite3-version> <node-pty-version>
 ```
 
-Copy the DMG's `app.asar` into `/tmp/codex-stage/resources/app.asar` before rebuilding/writing the final layout.
-
 ### 5) Install as the main desktop version
-Write the final app layout with:
+Run:
 
 ```bash
 ./scripts/write-main-install.sh /tmp/codex-stage <app-version> <build-number>
 ```
 
-This installs the main version at the fixed locations in `~/.local`.
-
-### 6) Replace old launchers only after verification
-After the new install launches successfully, remove or disable older Codex desktop shims, versioned launchers, and stale desktop entries so the user ends up with one main Codex launcher.
-
-### 7) Verify
-At minimum verify:
+### 6) Verify the real install
+Verification is mandatory:
 - `~/.local/bin/codex-desktop` exists and is executable
-- desktop entry points to the main wrapper
-- the app launches under the rebuilt runtime
-- no stale `codex-desktop-*` launchers remain unless user asked to keep them
+- the desktop entry exists and points to the main wrapper
+- the desktop entry uses the extracted default Codex icon
+- the wrapper launches from the final installed path
+- no stale `codex-desktop-*` launchers remain unless the user asked to keep them
 
 ## Notes
 
-- If launch fails with a missing native module, inspect the error and rebuild the missing Linux-native dependency instead of copying mac binaries.
-- If `7z` is missing, install it before doing anything else with the DMG.
-- If the machine lacks build tools, install them first; the transplant is not complete without native module rebuilds.
+- If launch fails, inspect the actual error and fix the install before finishing.
+- If a native module is missing or ABI-mismatched, rebuild it properly for Linux.
+- If prerequisite tools are missing, install them first; do not continue with a partial transplant.

@@ -23,19 +23,11 @@ rm -rf "$build_dir"
 mkdir -p "$build_dir" "$stage_dir/resources/app.asar.unpacked/node_modules"
 printf '{"private":true}\n' > "$build_dir/package.json"
 
-export npm_config_runtime=electron
-export npm_config_target="$electron_version"
-export npm_config_disturl=https://electronjs.org/headers
-export npm_config_build_from_source=true
-
-npm install --prefix "$build_dir" --no-save \
+npm install --prefix "$build_dir" --no-save @electron/rebuild \
   "better-sqlite3@${better_sqlite3_version}" \
   "node-pty@${node_pty_version}"
 
-(
-  cd "$build_dir"
-  npm rebuild better-sqlite3 node-pty
-)
+"$build_dir/node_modules/.bin/electron-rebuild" -f -v "$electron_version" -w better-sqlite3,node-pty --module-dir "$build_dir"
 
 rm -rf "$stage_dir/resources/app.asar.unpacked/node_modules/better-sqlite3"
 rm -rf "$stage_dir/resources/app.asar.unpacked/node_modules/node-pty"

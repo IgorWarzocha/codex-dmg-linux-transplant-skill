@@ -1,7 +1,5 @@
 # Codex DMG Linux Transplant Skill
 
-Tested on Omarchy.
-
 This skill installs or updates **Codex Desktop on Linux from `Codex.dmg`** when no official Linux build exists.
 
 It is designed for two cases:
@@ -13,9 +11,11 @@ What it does:
 
 - checks the current system first
 - finds a local DMG or uses the default Codex DMG URL
-- extracts the app metadata from the DMG
+- extracts the app metadata and default app icon from the DMG
 - prepares a Linux desktop install
 - installs Codex as the **main desktop version**, not as a side-by-side extra copy
+- bundles a Linux Codex CLI path instead of assuming one already exists
+- verifies that the installed wrapper actually launches
 
 Default DMG source:
 

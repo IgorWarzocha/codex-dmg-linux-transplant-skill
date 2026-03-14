@@ -1,56 +1,48 @@
 # Native Modules
 
-The DMG only gives you the app bundle and mac-native binaries. Linux needs its own rebuilt native modules.
+The DMG gives you portable app code and mac-native binaries. Linux still needs Linux-native dependencies.
 
-## What carries over from the DMG
+## Portable pieces from the DMG
 
-These are usually portable enough to reuse:
+These carry over:
 
 - `resources/app.asar`
-- metadata such as app version and build number
+- app metadata such as version and build number
+- the default app icon
 
-## What must be Linux-native
+## Non-portable pieces
 
 Do not reuse mac binaries for Linux:
 
 - `.node` addons
 - helper executables
-- platform-specific runtime pieces
+- the bundled mac `codex` binary inside the DMG
 
-## Known critical modules
-
-From the Codex DMG builds inspected so far, the main Linux rebuild targets are:
+## Known critical Linux rebuild targets
 
 - `better-sqlite3`
 - `node-pty`
 
-## Why rebuilds are required
+## CLI rule
 
-Native addons must match all of these:
+A clean Linux install must not depend on a preexisting global `codex` command.
 
-- Linux OS
-- target CPU architecture
-- Electron ABI
-- the Electron version used to launch the app
+Install a Linux Codex CLI into the bundle and point `CODEX_CLI_PATH` at it. A global `codex` may be used only as a fallback.
 
 ## Rebuild strategy
 
-Use the Electron version extracted from the DMG metadata and rebuild with:
+Use the Electron version extracted from the DMG metadata.
 
-- `npm_config_runtime=electron`
-- `npm_config_target=<electron-version>`
-- `npm_config_disturl=https://electronjs.org/headers`
-- `npm_config_build_from_source=true`
-
-The helper script `../scripts/rebuild-native-modules.sh` does this for the known critical modules.
+Install the target packages in a staging build directory, then rebuild them specifically for the target Electron version. The helper script uses `electron-rebuild` for this.
 
 ## If launch still fails
 
-Inspect the actual missing-module error.
+Inspect the real error.
 
 Common outcomes:
-- missing `.node` addon: rebuild/add that package to `app.asar.unpacked`
+- missing `.node` addon: add and rebuild that package
 - ABI mismatch: rebuild against the correct Electron version
-- wrong runtime path: fix the wrapper to use the intended Electron binary
+- wrong CLI path: install or point to a Linux Codex CLI
+- wrong runtime path: fix the wrapper to use the bundled Electron runtime
 
-Do not paper over missing Linux-native dependencies by copying mac binaries.
+Do not paper over Linux issues by copying mac binaries.

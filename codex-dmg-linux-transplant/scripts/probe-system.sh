@@ -31,6 +31,14 @@ for cmd in python3 node npm git curl 7z bsdtar gcc g++ make; do
 done
 
 echo
+echo '== python-packaging =='
+python3 - <<'PY'
+import importlib.util, ensurepip
+print('pip_module', importlib.util.find_spec('pip') is not None)
+print('ensurepip', ensurepip is not None)
+PY
+
+echo
 echo '== electron =='
 for cmd in electron electron40 electron41; do
   if command -v "$cmd" >/dev/null 2>&1; then
