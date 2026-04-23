@@ -85,8 +85,7 @@ while (stack.length) {
     const txt = fs.readFileSync(full, 'utf8');
     if (
       txt.includes('electron-desktop-features-changed') &&
-      txt.includes('browserPane') &&
-      txt.includes('projectlessThreads')
+      txt.includes('browserPane')
     ) {
       console.log(full);
       process.exit(0);
@@ -107,45 +106,16 @@ npx --yes prettier "$target_js" > "$pretty_js"
 
 python - <<'PY' "$pretty_js"
 from pathlib import Path
+import re
 import sys
 
 path = Path(sys.argv[1])
 text = path.read_text()
 
-dispatch_block = """function __FORCED_DESKTOP_FLAGS__() {
-  let e = (0, Q.c)(4),
-    t = !0,
-    n,
-    r;
-  return (
-    e[0] !== t
-      ? ((n = () => {
-          E.dispatchMessage(`electron-desktop-features-changed`, {
-            avatarOverlay: t,
-            ambientSuggestions: t,
-            artifactsPane: t,
-            browserAgent: t,
-            browserPane: t,
-            computerUse: t,
-            control: t,
-            multiWindow: t,
-            projectlessThreads: t,
-          });
-        }),
-        (r = [t]),
-        (e[0] = t),
-        (e[1] = n),
-        (e[2] = r))
-      : ((n = e[1]), (r = e[2])),
-    (0, Z.useEffect)(n, r),
-    null
-  );
-}"""
-
-dispatch_marker = 'E.dispatchMessage(`electron-desktop-features-changed`, {'
-dispatch_index = text.find(dispatch_marker)
-if dispatch_index == -1:
+dispatch_match = re.search(r"E\.dispatchMessage\(`electron-desktop-features-changed`,\s*\{", text)
+if dispatch_match is None:
     raise SystemExit('failed to locate desktop feature dispatch call')
+dispatch_index = dispatch_match.start()
 
 lines = text.splitlines(keepends=True)
 line_offsets = []
@@ -190,8 +160,47 @@ if func_end_line is None:
     func_end_line = len(lines)
 
 original_region = ''.join(lines[func_start_line:func_end_line])
-if '(0, Z.useEffect)' not in original_region or 'projectlessThreads' not in original_region:
+if '(0, Z.useEffect)' not in original_region or 'browserPane' not in original_region:
     raise SystemExit('desktop feature function candidate failed validation')
+
+feature_order = [
+    'avatarOverlay',
+    'ambientSuggestions',
+    'artifactsPane',
+    'browserAgent',
+    'browserAgentAvailable',
+    'browserPane',
+    'computerUse',
+    'control',
+    'multiWindow',
+    'projectlessThreads',
+]
+active_features = [name for name in feature_order if name in original_region]
+if 'browserPane' not in active_features:
+    raise SystemExit('desktop feature function is missing browserPane')
+
+feature_lines = '\n'.join(f'            {name}: t,' for name in active_features)
+dispatch_block = f"""function __FORCED_DESKTOP_FLAGS__() {{
+  let e = (0, Q.c)(4),
+    t = !0,
+    n,
+    r;
+  return (
+    e[0] !== t
+      ? ((n = () => {{
+          E.dispatchMessage(`electron-desktop-features-changed`, {{
+{feature_lines}
+          }});
+        }}),
+        (r = [t]),
+        (e[0] = t),
+        (e[1] = n),
+        (e[2] = r))
+      : ((n = e[1]), (r = e[2])),
+    (0, Z.useEffect)(n, r),
+    null
+  );
+}}"""
 
 replacement = dispatch_block.replace('__FORCED_DESKTOP_FLAGS__', func_name)
 text = ''.join(lines[:func_start_line]) + replacement + '\n' + ''.join(lines[func_end_line:])
@@ -212,6 +221,13 @@ for old in [
     'hf(`2171042036`)',
     'hf(`459748632`)',
     'hf(`2251025435`)',
+    'Zf(`2679188970`)',
+    'Zf(`2425897452`)',
+    'Zf(`3903742690`)',
+    'Zf(`1506311413`)',
+    'Zf(`2171042036`)',
+    'Zf(`459748632`)',
+    'Yp()',
 ]:
     text = text.replace(old, '!0')
 
@@ -227,7 +243,7 @@ if ! rg -q 'browserPane: t' "$target_js"; then
   exit 1
 fi
 
-if rg -q 'hf\(`2679188970`\)|hf\(`2425897452`\)|hf\(`3903742690`\)|hf\(`410262010`\)|hf\(`1506311413`\)|hf\(`2171042036`\)|hf\(`459748632`\)|hf\(`2251025435`\)|xu\(`2679188970`\)|xu\(`2425897452`\)|xu\(`3903742690`\)|xu\(`4250630194`\)|xu\(`459748632`\)|xu\(`2251025435`\)|xu\(bI\)' "$target_js"; then
+if rg -q 'hf\(`2679188970`\)|hf\(`2425897452`\)|hf\(`3903742690`\)|hf\(`410262010`\)|hf\(`1506311413`\)|hf\(`2171042036`\)|hf\(`459748632`\)|hf\(`2251025435`\)|xu\(`2679188970`\)|xu\(`2425897452`\)|xu\(`3903742690`\)|xu\(`4250630194`\)|xu\(`459748632`\)|xu\(`2251025435`\)|xu\(bI\)|Zf\(`2679188970`\)|Zf\(`2425897452`\)|Zf\(`3903742690`\)|Zf\(`1506311413`\)|Zf\(`2171042036`\)|Zf\(`459748632`\)|\bYp\(\)' "$target_js"; then
   echo 'desktop flag gate calls still remain after patch' >&2
   exit 1
 fi
