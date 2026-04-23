@@ -9,6 +9,7 @@ fi
 stage_dir="$1"
 app_version="$2"
 build_number="$3"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 final_dir="$HOME/.local/opt/codex-desktop"
 wrapper_path="$HOME/.local/bin/codex-desktop"
 desktop_path="$HOME/.local/share/applications/codex-desktop.desktop"
@@ -88,6 +89,8 @@ Icon=${icon_path}
 StartupWMClass=Codex
 MimeType=x-scheme-handler/codex;
 EOF
+
+"$script_dir/patch-desktop-flags.sh" "$final_dir"
 
 find "$HOME/.local/bin" -maxdepth 1 -type f -name 'codex-desktop-*' -delete
 find "$HOME/.local/share/applications" -maxdepth 1 -type f -name 'codex-desktop-*.desktop' -delete

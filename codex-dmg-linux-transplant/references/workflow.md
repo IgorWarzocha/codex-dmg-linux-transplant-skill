@@ -30,8 +30,9 @@ Produce one main install at:
 7. Install a Linux Codex CLI into the bundle with `../scripts/install-codex-cli.sh`
 8. Rebuild Linux-native modules with `../scripts/rebuild-native-modules.sh`
 9. Write the main install layout with `../scripts/write-main-install.sh`
-10. Launch the installed wrapper and verify it works
-11. Remove stale versioned launchers and old shims after verification
+10. Automatically patch desktop-only renderer flags during install
+11. Launch the installed wrapper and verify it works
+12. Remove stale versioned launchers and old shims after verification
 
 ## Staging layout
 

@@ -27,6 +27,7 @@ Use this skill when Codex Desktop must be installed or updated on Linux from a m
 2. `references/system-checks.md`
 3. `references/native-modules.md`
 4. `references/install-layout.md`
+5. `references/desktop-flags.md`
 
 ## Default workflow
 
@@ -80,6 +81,8 @@ Run:
 ```bash
 ./scripts/write-main-install.sh /tmp/codex-stage <app-version> <build-number>
 ```
+
+This now also applies the desktop flag patch automatically.
 
 ### 6) Verify the real install
 Verification is mandatory:

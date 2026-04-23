@@ -1,0 +1,251 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+  echo 'usage: patch-desktop-flags.sh <app-dir>' >&2
+  exit 1
+fi
+
+app_dir="$1"
+asar_path="$app_dir/resources/app.asar"
+unpacked_dir="$app_dir/resources/app.asar.unpacked"
+
+if [[ ! -f "$asar_path" ]]; then
+  echo "missing app.asar: $asar_path" >&2
+  exit 1
+fi
+
+if [[ ! -d "$unpacked_dir" ]]; then
+  echo "missing app.asar.unpacked: $unpacked_dir" >&2
+  exit 1
+fi
+
+tmp_dir="$(mktemp -d)"
+cleanup() {
+  rm -rf "$tmp_dir"
+}
+trap cleanup EXIT
+
+extract_dir="$tmp_dir/extracted"
+mkdir -p "$extract_dir"
+
+extract_err="$tmp_dir/extract.err"
+attempt=0
+while true; do
+  rm -rf "$extract_dir"
+  mkdir -p "$extract_dir"
+  if npx --yes asar extract "$asar_path" "$extract_dir" 2>"$extract_err"; then
+    break
+  fi
+
+  attempt=$((attempt + 1))
+  if (( attempt > 50 )); then
+    cat "$extract_err" >&2
+    echo 'too many missing unpacked files while extracting app.asar' >&2
+    exit 1
+  fi
+
+  missing_path="$(python - <<'PY' "$extract_err"
+import pathlib, re, sys
+text = pathlib.Path(sys.argv[1]).read_text(errors='ignore')
+m = re.search(r"ENOENT: .* open '([^']+app\.asar\.unpacked[^']+)'", text)
+print(m.group(1) if m else '')
+PY
+)"
+
+  if [[ -z "$missing_path" ]]; then
+    cat "$extract_err" >&2
+    exit 1
+  fi
+
+  mkdir -p "$(dirname "$missing_path")"
+  : > "$missing_path"
+  case "$missing_path" in
+    */.bin/*|*.sh)
+      chmod +x "$missing_path"
+      ;;
+  esac
+done
+
+target_js="$(node - <<'PY' "$extract_dir"
+const fs = require('fs');
+const path = require('path');
+
+const root = process.argv[2];
+const stack = [root];
+while (stack.length) {
+  const current = stack.pop();
+  for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+    const full = path.join(current, entry.name);
+    if (entry.isDirectory()) {
+      stack.push(full);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith('.js')) continue;
+    const txt = fs.readFileSync(full, 'utf8');
+    if (
+      txt.includes('electron-desktop-features-changed') &&
+      txt.includes('browserPane') &&
+      txt.includes('projectlessThreads')
+    ) {
+      console.log(full);
+      process.exit(0);
+    }
+  }
+}
+process.exit(1);
+PY
+)"
+
+if [[ -z "$target_js" || ! -f "$target_js" ]]; then
+  echo 'missing renderer bundle with desktop feature flags in extracted app' >&2
+  exit 1
+fi
+
+pretty_js="$tmp_dir/index.pretty.js"
+npx --yes prettier "$target_js" > "$pretty_js"
+
+python - <<'PY' "$pretty_js"
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+
+dispatch_block = """function __FORCED_DESKTOP_FLAGS__() {
+  let e = (0, Q.c)(4),
+    t = !0,
+    n,
+    r;
+  return (
+    e[0] !== t
+      ? ((n = () => {
+          E.dispatchMessage(`electron-desktop-features-changed`, {
+            avatarOverlay: t,
+            ambientSuggestions: t,
+            artifactsPane: t,
+            browserAgent: t,
+            browserPane: t,
+            computerUse: t,
+            control: t,
+            multiWindow: t,
+            projectlessThreads: t,
+          });
+        }),
+        (r = [t]),
+        (e[0] = t),
+        (e[1] = n),
+        (e[2] = r))
+      : ((n = e[1]), (r = e[2])),
+    (0, Z.useEffect)(n, r),
+    null
+  );
+}"""
+
+dispatch_marker = 'E.dispatchMessage(`electron-desktop-features-changed`, {'
+dispatch_index = text.find(dispatch_marker)
+if dispatch_index == -1:
+    raise SystemExit('failed to locate desktop feature dispatch call')
+
+lines = text.splitlines(keepends=True)
+line_offsets = []
+offset = 0
+for line in lines:
+    line_offsets.append(offset)
+    offset += len(line)
+
+dispatch_line = None
+for idx, start in enumerate(line_offsets):
+    end = start + len(lines[idx])
+    if start <= dispatch_index < end:
+        dispatch_line = idx
+        break
+
+if dispatch_line is None:
+    raise SystemExit('failed to map desktop feature dispatch call to line')
+
+func_start_line = None
+func_name = None
+for idx in range(dispatch_line, -1, -1):
+    line = lines[idx].strip()
+    if line.startswith('function ') and line.endswith('{'):
+        prefix = line[len('function '):]
+        candidate = prefix.split('(', 1)[0].strip()
+        if candidate:
+            func_start_line = idx
+            func_name = candidate
+            break
+
+if func_start_line is None or func_name is None:
+    raise SystemExit('failed to locate desktop feature function start')
+
+func_end_line = None
+for idx in range(func_start_line + 1, len(lines)):
+    stripped = lines[idx].strip()
+    if stripped.startswith('function ') and stripped.endswith('{'):
+        func_end_line = idx
+        break
+
+if func_end_line is None:
+    func_end_line = len(lines)
+
+original_region = ''.join(lines[func_start_line:func_end_line])
+if '(0, Z.useEffect)' not in original_region or 'projectlessThreads' not in original_region:
+    raise SystemExit('desktop feature function candidate failed validation')
+
+replacement = dispatch_block.replace('__FORCED_DESKTOP_FLAGS__', func_name)
+text = ''.join(lines[:func_start_line]) + replacement + '\n' + ''.join(lines[func_end_line:])
+
+for old in [
+    'xu(bI)',
+    'xu(`2679188970`)',
+    'xu(`2425897452`)',
+    'xu(`3903742690`)',
+    'xu(`4250630194`)',
+    'xu(`459748632`)',
+    'xu(`2251025435`)',
+    'hf(`2679188970`)',
+    'hf(`2425897452`)',
+    'hf(`3903742690`)',
+    'hf(`410262010`)',
+    'hf(`1506311413`)',
+    'hf(`2171042036`)',
+    'hf(`459748632`)',
+    'hf(`2251025435`)',
+]:
+    text = text.replace(old, '!0')
+
+path.write_text(text)
+PY
+
+npx --yes prettier "$pretty_js" >/dev/null
+
+install -m 0644 "$pretty_js" "$target_js"
+
+if ! rg -q 'browserPane: t' "$target_js"; then
+  echo 'desktop flag patch did not apply as expected' >&2
+  exit 1
+fi
+
+if rg -q 'hf\(`2679188970`\)|hf\(`2425897452`\)|hf\(`3903742690`\)|hf\(`410262010`\)|hf\(`1506311413`\)|hf\(`2171042036`\)|hf\(`459748632`\)|hf\(`2251025435`\)|xu\(`2679188970`\)|xu\(`2425897452`\)|xu\(`3903742690`\)|xu\(`4250630194`\)|xu\(`459748632`\)|xu\(`2251025435`\)|xu\(bI\)' "$target_js"; then
+  echo 'desktop flag gate calls still remain after patch' >&2
+  exit 1
+fi
+
+patched_asar="$tmp_dir/app.asar"
+unpack_arg=''
+if [[ -d "$extract_dir/node_modules" ]]; then
+  mapfile -t unpack_dirs < <(find "$extract_dir/node_modules" -mindepth 1 -maxdepth 1 -type d -printf 'node_modules/%f\n' | sort)
+  if (( ${#unpack_dirs[@]} > 0 )); then
+    unpack_arg="{$(IFS=,; echo "${unpack_dirs[*]}")}"
+  fi
+fi
+
+if [[ -n "$unpack_arg" ]]; then
+  npx --yes asar pack "$extract_dir" "$patched_asar" --unpack-dir "$unpack_arg"
+else
+  npx --yes asar pack "$extract_dir" "$patched_asar"
+fi
+
+install -m 0644 "$patched_asar" "$asar_path"
+echo "patched desktop flags in $asar_path"

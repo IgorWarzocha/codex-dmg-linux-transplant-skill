@@ -15,7 +15,17 @@ What it does:
 - prepares a Linux desktop install
 - installs Codex as the **main desktop version**, not as a side-by-side extra copy
 - bundles a Linux Codex CLI path instead of assuming one already exists
+- automatically patches the transplanted app to force-enable desktop UI flags
 - verifies that the installed wrapper actually launches
+
+Desktop flag patching currently targets:
+
+- avatar overlay
+- ambient suggestions
+- artifacts pane
+- browser pane
+- multi-window
+- projectless threads
 
 Default DMG source:
 
